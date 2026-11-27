@@ -64,7 +64,7 @@ jobs:
             { echo "::error::$DOCS_PATH/docs/v1 does not exist, so the root in commondoc.config.php would not resolve."; exit 1; }
 
       - name: Build the site
-        uses: common-doc/commondoc@1.0.0-alpha.2
+        uses: common-doc/commondoc@1.0.0
         env:
           COMMONDOC_CONFIG: /github/workspace/commondoc.config.php
         with:
