@@ -1,0 +1,96 @@
+name: Publish docs
+
+# Builds the documentation with the commondoc container action and publishes it to
+# GitHub Pages.
+#
+# The action runs a container, so no PHP toolchain is set up on the runner. It mounts this
+# repository at /github/workspace, and the console inside the image changes directory to
+# /app, which is why commondoc.config.php names every path absolutely.
+#
+# The documentation is not kept here. It is checked out beside this repository and the
+# configuration names that directory, so the site follows the source branch rather than a
+# copy that has to be kept in step.
+#
+# The action is pinned to a release tag rather than a branch, so the site cannot change
+# behaviour because a branch moved. `0` and the image tag the action pulls are published
+# from the same release.
+#
+# Pages takes a directory, so the build writes into the workspace and
+# upload-pages-artifact uploads it. `output` is absolute because it is read inside the
+# container; `path: build` is relative because the upload runs on the runner, in the
+# workspace, after the container has exited.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  # The documentation source, and where this workflow puts it on disk. The configuration
+  # states the same path, and a root that resolved to nothing would build the image's own
+  # documentation, so the path is checked before the build runs.
+  DOCS_REPOSITORY: common-doc/commondoc
+  DOCS_REF: 1.0.x
+  DOCS_PATH: /github/workspace/commondoc
+
+jobs:
+  build:
+    name: Build the site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the site repository
+        uses: actions/checkout@v7
+
+      - name: Check out the documentation source
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ env.DOCS_REPOSITORY }}
+          ref: ${{ env.DOCS_REF }}
+          path: commondoc
+
+      - name: Confirm the source is where the configuration expects it
+        run: |
+          set -euo pipefail
+          [ -d "$DOCS_PATH/docs/v1" ] ||
+            { echo "::error::$DOCS_PATH/docs/v1 does not exist, so the root in commondoc.config.php would not resolve."; exit 1; }
+
+      - name: Build the site
+        uses: common-doc/commondoc@1.0.0-alpha.2
+        env:
+          COMMONDOC_CONFIG: /github/workspace/commondoc.config.php
+        with:
+          output: /github/workspace/build
+
+      - name: Confirm the build wrote a site
+        run: |
+          set -euo pipefail
+          [ -f build/index.html ] ||
+            { echo "::error::The build produced no build/index.html."; exit 1; }
+          [ -f build/search-index.json ] ||
+            { echo "::error::The build produced no search index."; exit 1; }
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: build
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5
