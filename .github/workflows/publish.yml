@@ -35,11 +35,17 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # The documentation source, and where this workflow puts it on disk. The configuration
-  # states the same path, and a root that resolved to nothing would build the image's own
-  # documentation, so the path is checked before the build runs.
+  # The documentation source, and where this workflow puts it on disk.
+  #
+  # Two paths, because two filesystems are involved. `DOCS_DIR` is relative and is what
+  # the checkout step writes on the runner. `DOCS_PATH` is what the container sees: the
+  # action mounts the workspace at /github/workspace, so the same directory has a different
+  # absolute path inside the image, and commondoc.config.php must state that one. A check
+  # that used the container path on the runner would always fail, because /github does not
+  # exist there.
   DOCS_REPOSITORY: common-doc/commondoc
   DOCS_REF: 1.0.x
+  DOCS_DIR: commondoc
   DOCS_PATH: /github/workspace/commondoc
 
 jobs:
@@ -55,13 +61,13 @@ jobs:
         with:
           repository: ${{ env.DOCS_REPOSITORY }}
           ref: ${{ env.DOCS_REF }}
-          path: commondoc
+          path: ${{ env.DOCS_DIR }}
 
       - name: Confirm the source is where the configuration expects it
         run: |
           set -euo pipefail
-          [ -d "$DOCS_PATH/docs/v1" ] ||
-            { echo "::error::$DOCS_PATH/docs/v1 does not exist, so the root in commondoc.config.php would not resolve."; exit 1; }
+          [ -d "$DOCS_DIR/docs/v1" ] ||
+            { echo "::error::$DOCS_DIR/docs/v1 is missing on the runner, so $DOCS_PATH/docs/v1 would not resolve inside the container either."; exit 1; }
 
       - name: Build the site
         uses: common-doc/commondoc@1.0.0
