@@ -23,6 +23,10 @@ name: Publish docs
 on:
   push:
     branches: [main]
+  # Sent by a repository that has published a release, so a tag there reaches this
+  # build without either repository knowing how the other is arranged. A dispatch only
+  # starts a workflow that exists on the default branch, which is this one.
+  repository_dispatch:
   workflow_dispatch:
 
 permissions:
